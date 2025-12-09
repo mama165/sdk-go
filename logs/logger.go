@@ -1,25 +1,37 @@
 package logs
 
 import (
+	"bytes"
 	"log/slog"
 	"os"
 )
 
-// GetLoggerFromString Build a logger
-// Fallback as INFO by default
-func GetLoggerFromString(logLevel string) *slog.Logger {
-	var level slog.Level
-	if err := level.UnmarshalText([]byte(logLevel)); err != nil {
-		level = slog.LevelInfo
+// GetLevelFromString Initialize a logLevel (default is INFO)
+func GetLevelFromString(strLevel string) slog.Level {
+	var logLevel slog.Level
+	if err := logLevel.UnmarshalText([]byte(strLevel)); err != nil {
+		return slog.LevelInfo
 	}
-	return GetLoggerFromLevel(level)
+	return logLevel
 }
 
-// GetLoggerFromLevel Build a logger
-// Fallback as INFO by default
+// GetLoggerFromLevel Initialize a logger from a log level
 func GetLoggerFromLevel(logLevel slog.Level) *slog.Logger {
-	handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: logLevel,
-	})
-	return slog.New(handler)
+	handlerOpts := &slog.HandlerOptions{Level: logLevel}
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, handlerOpts))
+	slog.SetDefault(logger)
+	return logger
+}
+
+// GetLoggerFromBufferWithLogger Initialize a logger from a log level & a buffer
+func GetLoggerFromBufferWithLogger(buf *bytes.Buffer, logLevel slog.Level) *slog.Logger {
+	handlerOpts := &slog.HandlerOptions{Level: logLevel}
+	logger := slog.New(slog.NewJSONHandler(buf, handlerOpts))
+	slog.SetDefault(logger)
+	return logger
+}
+
+// GetLoggerFromString Initialize a logger from a string
+func GetLoggerFromString(strLevel string) *slog.Logger {
+	return GetLoggerFromLevel(GetLevelFromString(strLevel))
 }

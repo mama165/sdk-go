@@ -2,72 +2,67 @@ package middleware
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
-	"net/http"
-	"time"
-
 	"log/slog"
+	"net/http"
+	"strings"
 )
 
-// responseRecorder intercepts the response body & status code
-type responseRecorder struct {
-	http.ResponseWriter
-	statusCode int
-	body       *bytes.Buffer
-}
-
-func newResponseRecorder(w http.ResponseWriter) *responseRecorder {
-	return &responseRecorder{
-		ResponseWriter: w,
-		statusCode:     http.StatusOK,
-		body:           bytes.NewBuffer(nil),
-	}
-}
-
-func (r *responseRecorder) WriteHeader(code int) {
-	r.statusCode = code
-	r.ResponseWriter.WriteHeader(code)
-}
-
-func (r *responseRecorder) Write(b []byte) (int, error) {
-	r.body.Write(b)
-	return r.ResponseWriter.Write(b)
-}
-
-// LogRequestResponse logs HTTP request & response bodies using slog
-func LogRequestResponse(logger *slog.Logger) func(http.Handler) http.Handler {
+// LogJSONBodyMiddleware is an HTTP middleware that logs the JSON request body
+// Reads and logs the body of incoming HTTP requests
+// Only if the method is POST, PUT or PATCH
+// Only if the Content-Type is "application/json".
+// Avoid file upload with multipart content-type
+// The body is read once then deserialized into a map for structured logging
+// Useful for debugging JSON payloads during development or in controlled environments.
+// ⚠️ Note: The request body is logged in plain text.
+// ⚠️ Note: Do not use this in production without filtering or masking sensitive fields
+// To secure : passwords, tokens, or credentials.
+func LogJSONBodyMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Handle file upload
+			if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+				logger.Debug("[upload] incoming upload request",
+					slog.String("method", r.Method),
+					slog.String("url", r.URL.String()),
+				)
+			} else {
+				// Read and duplicate the body
+				var buf bytes.Buffer
+				tee := io.TeeReader(r.Body, &buf)
 
-			start := time.Now()
+				// Decode the JSON into a generic map
+				var jsonBody map[string]any
+				err := json.NewDecoder(tee).Decode(&jsonBody)
+				switch {
+				case err == io.EOF: // Empty body
+					logger.Debug("[json] incoming request",
+						slog.String("method", r.Method),
+						slog.String("url", r.URL.String()),
+					)
+				case err != nil: // Error decoding JSON
+					logger.Error("failed to decode JSON body",
+						slog.String("method", r.Method),
+						slog.String("url", r.URL.String()),
+						slog.Any("error", err),
+					)
+				default: // Successfully decoded JSON
+					if _, ok := jsonBody["password"]; ok {
+						jsonBody["password"] = "*****"
+					}
+					logger.Debug("[json] incoming request",
+						slog.String("method", r.Method),
+						slog.String("url", r.URL.String()),
+						slog.Any("body", jsonBody),
+					)
+				}
 
-			// --- Read request body ---
-			var reqBody []byte
-			if r.Body != nil {
-				reqBody, _ = io.ReadAll(r.Body)
+				// Always restore the body for the next handler
+				r.Body = io.NopCloser(&buf)
 			}
-
-			// Restore body to prevent issues in handlers
-			r.Body = io.NopCloser(bytes.NewBuffer(reqBody))
-
-			logger.Info("HTTP request received",
-				slog.String("method", r.Method),
-				slog.String("path", r.URL.Path),
-				slog.String("body", string(reqBody)),
-			)
-
-			// --- Wrap response writer ---
-			rec := newResponseRecorder(w)
-
-			// Execute next handler
-			next.ServeHTTP(rec, r)
-
-			// --- Log the response ---
-			logger.Info("HTTP response sent",
-				slog.Int("status", rec.statusCode),
-				slog.String("body", rec.body.String()),
-				slog.Duration("duration", time.Since(start)),
-			)
+			next.ServeHTTP(w, r)
 		})
 	}
 }
