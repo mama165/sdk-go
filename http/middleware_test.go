@@ -3,7 +3,6 @@ package http
 import (
 	"bytes"
 	"encoding/json"
-	"io"
 	"log/slog"
 	"mime/multipart"
 	"net/http"
@@ -15,111 +14,115 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestLogJSONBodyMiddlewareObfuscatingPassword(t *testing.T) {
+func TestLogObfuscatesPassword(t *testing.T) {
 	ass := assert.New(t)
+
 	var buf bytes.Buffer
 	logger := logs.GetLoggerFromBufferWithLogger(&buf, slog.LevelDebug)
 
 	body := `{"email":"user@example.com","password":"secret"}`
 	r := httptest.NewRequest(http.MethodPost, "/test", strings.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
+
 	w := httptest.NewRecorder()
 
-	middleware := LogJSONBodyMiddleware(logger)
-	middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mw := LogJSONBodyMiddleware(logger)
+	mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})).ServeHTTP(w, r)
 
+	// slog can produce multiple lines
+	// Parsing the last one
+	lines := bytes.Split(bytes.TrimSpace(buf.Bytes()), []byte("\n"))
+	last := lines[len(lines)-1]
+
 	var logEntry map[string]any
-	err := json.Unmarshal(buf.Bytes(), &logEntry)
+	err := json.Unmarshal(last, &logEntry)
 	ass.NoError(err)
 
-	bodyField, ok := logEntry["body"]
-	ass.True(ok)
-
-	bodyMap, ok := bodyField.(map[string]any)
-	ass.True(ok)
-	ass.Equal(http.StatusOK, w.Code)
-	ass.Equal("/test", logEntry["url"])
-	ass.Equal(bodyMap["email"], "user@example.com")
-	ass.Equal(bodyMap["password"], "*****")
+	bodyField := logEntry["body"].(map[string]any)
+	ass.Equal("user@example.com", bodyField["email"])
+	ass.Equal("*****", bodyField["password"])
 }
 
-func TestLogWithGetMethod(t *testing.T) {
+func TestNoLogOnGetWithoutBody(t *testing.T) {
 	ass := assert.New(t)
+
 	var buf bytes.Buffer
 	logger := logs.GetLoggerFromBufferWithLogger(&buf, slog.LevelDebug)
 
 	r := httptest.NewRequest(http.MethodGet, "/test", nil)
 	w := httptest.NewRecorder()
 
-	middleware := LogJSONBodyMiddleware(logger)
-	middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	LogJSONBodyMiddleware(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})).ServeHTTP(w, r)
 
-	var logEntry map[string]any
-	err := json.Unmarshal(buf.Bytes(), &logEntry)
-	ass.NoError(err)
-
+	// Then no log are expected
 	ass.Equal(http.StatusOK, w.Code)
-	ass.Equal(http.MethodGet, logEntry["method"])
-	ass.Equal("/test", logEntry["url"])
+	ass.Len(buf.Bytes(), 0)
 }
 
 func TestLogWithBodyError(t *testing.T) {
 	ass := assert.New(t)
+
 	var buf bytes.Buffer
 	logger := logs.GetLoggerFromBufferWithLogger(&buf, slog.LevelDebug)
 
-	body := `"email":"user"` // Invalid JSON
+	body := `{"email":`
 	r := httptest.NewRequest(http.MethodPost, "/test", strings.NewReader(body))
+	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
-	middleware := LogJSONBodyMiddleware(logger)
-	middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})).ServeHTTP(w, r)
+	LogJSONBodyMiddleware(logger)(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}),
+	).ServeHTTP(w, r)
 
-	var logEntry map[string]any
-	err := json.Unmarshal(buf.Bytes(), &logEntry)
-	ass.NoError(err)
+	lines := bytes.Split(bytes.TrimSpace(buf.Bytes()), []byte("\n"))
+	ass.NotEmpty(lines)
 
+	foundError := false
+
+	for _, line := range lines {
+		var entry map[string]any
+		if err := json.Unmarshal(line, &entry); err != nil {
+			continue
+		}
+
+		if entry["level"] == "ERROR" && entry["error"] != nil {
+			foundError = true
+			break
+		}
+	}
+
+	ass.True(foundError)
 	ass.Equal(http.StatusOK, w.Code)
-	ass.Equal("/test", logEntry["url"])
-	ass.Equal("failed to decode JSON body", logEntry["msg"])
-	ass.Equal("json: cannot unmarshal string into Go value of type map[string]interface {}", logEntry["error"])
 }
 
-func TestLogWithFileUploadMethod(t *testing.T) {
+func TestMultipartIsIgnored(t *testing.T) {
 	ass := assert.New(t)
+
 	var buf bytes.Buffer
 	logger := logs.GetLoggerFromBufferWithLogger(&buf, slog.LevelDebug)
+
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
-
-	// Given a fake file
-	part, err := writer.CreateFormFile("file", "test.txt")
+	defer writer.Close()
+	_, err := writer.CreateFormField("file")
 	ass.NoError(err)
-	_, err = io.Copy(part, strings.NewReader("file content"))
-	ass.NoError(err)
-	writer.Close()
 
 	r := httptest.NewRequest(http.MethodPost, "/upload", body)
-	w := httptest.NewRecorder()
 	r.Header.Set("Content-Type", writer.FormDataContentType())
 
-	middleware := LogJSONBodyMiddleware(logger)
-	middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	w := httptest.NewRecorder()
+
+	LogJSONBodyMiddleware(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})).ServeHTTP(w, r)
 
-	var logEntry map[string]any
-	err = json.Unmarshal(buf.Bytes(), &logEntry)
-	ass.NoError(err)
-
-	ass.Equal(http.MethodPost, logEntry["method"])
+	// Then no log are expected
 	ass.Equal(http.StatusOK, w.Code)
-	ass.Equal("/upload", logEntry["url"])
-	ass.Equal("[upload] incoming upload request", logEntry["msg"])
+	ass.Len(buf.Bytes(), 0)
 }

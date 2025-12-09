@@ -16,18 +16,17 @@ import (
 // To secure : passwords, tokens, or credentials.
 func UnaryLoggingInterceptor(logger *slog.Logger) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
-		_, ok := req.(*emptypb.Empty)
-		if ok {
+		if _, ok := req.(*emptypb.Empty); ok {
 			logger.Debug("[gRPC] incoming request",
 				slog.String("method", info.FullMethod),
 				slog.String("request", "the body is empty"),
 			)
-		} else {
-			logger.Debug("[gRPC] incoming request",
-				slog.String("method", info.FullMethod),
-				slog.Any("request", req),
-			)
+			return handler(ctx, req)
 		}
+		logger.Debug("[gRPC] incoming request",
+			slog.String("method", info.FullMethod),
+			slog.Any("request", req),
+		)
 		return handler(ctx, req)
 	}
 }
