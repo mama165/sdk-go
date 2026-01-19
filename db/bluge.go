@@ -1,8 +1,9 @@
 package db
 
 import (
-	"github.com/blugelabs/bluge"
 	"testing"
+
+	"github.com/blugelabs/bluge"
 )
 
 func LoadBluge(t *testing.T) (*bluge.Writer, error) {

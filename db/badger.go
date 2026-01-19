@@ -1,8 +1,9 @@
 package db
 
 import (
-	"github.com/dgraph-io/badger/v4"
 	"testing"
+
+	"github.com/dgraph-io/badger/v4"
 )
 
 // LoadBadger Reduced to 16 Mo for testing (avoid 20 Go of storage)

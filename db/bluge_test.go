@@ -2,9 +2,10 @@ package db
 
 import (
 	"context"
+	"testing"
+
 	"github.com/blugelabs/bluge"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestLoadBluge_SanityCheck(t *testing.T) {

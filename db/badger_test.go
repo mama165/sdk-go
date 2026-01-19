@@ -1,9 +1,10 @@
 package db
 
 import (
+	"testing"
+
 	"github.com/dgraph-io/badger/v4"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestLoadBadger_SanityCheck(t *testing.T) {
