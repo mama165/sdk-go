@@ -9,7 +9,7 @@ import (
 
 func TestLoadBadger_SanityCheck(t *testing.T) {
 	req := require.New(t)
-	db, err := LoadBadger(t)
+	db, err := LoadBadger(t.TempDir())
 	req.NoError(err)
 	defer db.Close()
 

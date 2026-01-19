@@ -11,7 +11,7 @@ import (
 func TestLoadBluge_SanityCheck(t *testing.T) {
 	req := require.New(t)
 	ctx := context.Background()
-	writer, err := LoadBluge(t)
+	writer, err := LoadBluge(t.TempDir())
 	req.NoError(err)
 	req.NotNil(writer)
 	defer writer.Close()
