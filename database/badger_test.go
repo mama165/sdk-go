@@ -1,4 +1,4 @@
-package db
+package database
 
 import (
 	"testing"
@@ -9,7 +9,7 @@ import (
 
 func TestLoadBadger_SanityCheck(t *testing.T) {
 	req := require.New(t)
-	db, err := LoadBadger(t.TempDir())
+	db, err := LoadBadger(DefaultPath)
 	req.NoError(err)
 	defer db.Close()
 

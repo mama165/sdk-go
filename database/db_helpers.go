@@ -1,19 +1,31 @@
-package db
+package database
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"os"
 
 	"github.com/blugelabs/bluge"
 	"github.com/dgraph-io/badger/v4"
 	"github.com/mama165/sdk-go/logs"
 )
 
+const DefaultPath = "/tmp/database/debug"
+
 // LoadBadger opens a small Badger DB for testing or benchmarks
 func LoadBadger(path string) (*badger.DB, error) {
+	// Ensure the directory exists with correct permissions before opening
+	if err := os.MkdirAll(path, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create badger directory: %w", err)
+	}
+
 	opts := badger.DefaultOptions(path).
 		WithLoggingLevel(badger.ERROR).
-		WithValueLogFileSize(16 << 20)
+		WithValueLogFileSize(16 << 20).
+		// This helps if you run/stop tests quickly
+		WithCompactL0OnClose(true)
+
 	return badger.Open(opts)
 }
 
