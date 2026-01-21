@@ -114,7 +114,7 @@ func startDebugServer(db *badger.DB, port int, mapper RowMapper) {
 // Wait blocks the test and prints the inspection link with the given prefix.
 func Wait(prefix string) {
 	url := fmt.Sprintf("http://localhost:%d/inspect?prefix=%s", currentPort, prefix)
-	fmt.Printf("\n⏸️  TEST PAUSED\n👉 INSPECT: %s\n", url)
+	fmt.Printf("\n--- TEST PAUSED ---\n\n%s\n\n-------------------\n", url)
 	<-resumeChan
 }
 

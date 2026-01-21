@@ -17,7 +17,10 @@ func LoadBadger(path string) (*badger.DB, error) {
 	if err := os.MkdirAll(path, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create badger directory: %w", err)
 	}
-	opts := badger.DefaultOptions(path).WithLoggingLevel(badger.ERROR).WithValueLogFileSize(16 << 20).WithCompactL0OnClose(true)
+	opts := badger.DefaultOptions(path).
+		WithLoggingLevel(badger.ERROR).
+		WithValueLogFileSize(16 << 20).
+		WithCompactL0OnClose(true)
 	return badger.Open(opts)
 }
 
