@@ -45,7 +45,7 @@ func TestDebugServer_Routing(t *testing.T) {
 
 	// WHEN: Starting the server on a random port
 	port := 9999
-	startDebugServer(db, port, nil)
+	StartDebugServer(db, port, "/inspect", nil)
 
 	// Give it a few ms to boot
 	time.Sleep(100 * time.Millisecond)

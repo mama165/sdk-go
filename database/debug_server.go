@@ -43,9 +43,9 @@ type PageData struct {
 }
 
 // Inspect wraps the debug server lifecycle and blocks execution with Wait.
-func Inspect(db *badger.DB, port int, mapper RowMapper, prefix string, fn func()) {
+func Inspect(db *badger.DB, port int, endpoint string, mapper RowMapper, prefix string, fn func()) {
 	// Start the server (non-blocking)
-	startDebugServer(db, port, mapper)
+	StartDebugServer(db, port, endpoint, mapper)
 
 	// Execute the user's code (e.g., storing data)
 	if fn != nil {
@@ -58,7 +58,7 @@ func Inspect(db *badger.DB, port int, mapper RowMapper, prefix string, fn func()
 
 // StartDebugServer starts the HTTP server.
 // Pass a custom RowMapper to decode your specific data (e.g., Protobuf).
-func startDebugServer(db *badger.DB, port int, mapper RowMapper) {
+func StartDebugServer(db *badger.DB, port int, endpoint string, mapper RowMapper) {
 	currentPort = port
 	mux := http.NewServeMux()
 
@@ -70,7 +70,7 @@ func startDebugServer(db *badger.DB, port int, mapper RowMapper) {
 		mapper = DefaultMapper
 	}
 
-	mux.HandleFunc("/inspect", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(endpoint, func(w http.ResponseWriter, r *http.Request) {
 		prefix := r.URL.Query().Get("prefix")
 		if prefix == "" {
 			prefix = "analysis:"
